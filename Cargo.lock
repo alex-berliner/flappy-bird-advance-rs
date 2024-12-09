@@ -85,13 +85,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "agb_template"
-version = "0.1.0"
-dependencies = [
- "agb",
-]
-
-[[package]]
 name = "ahash"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -225,6 +218,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "flappy_burst"
+version = "0.1.0"
+dependencies = [
+ "agb",
+ "log",
+ "mgba_log",
+]
+
+[[package]]
 name = "flate2"
 version = "1.0.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -287,6 +289,15 @@ name = "log"
 version = "0.4.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
+
+[[package]]
+name = "mgba_log"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7079c1b3ad4a964b0a18fd7767357527952c9c62ed70b3fa909af813dfb347c"
+dependencies = [
+ "log",
+]
 
 [[package]]
 name = "miniz_oxide"

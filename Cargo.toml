@@ -1,5 +1,5 @@
 [package]
-name = "agb_template"
+name = "flappy_burst"
 version = "0.1.0"
 authors = [""]
 edition = "2021"
@@ -8,6 +8,8 @@ edition = "2021"
 
 [dependencies]
 agb = "0.21.1"
+mgba_log = "0.2.1"
+log = "0.4.18"
 
 [profile.dev]
 opt-level = 3
