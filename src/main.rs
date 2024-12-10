@@ -36,8 +36,16 @@ have a struct for object data and collision type
 #![no_std]
 #![no_main]
 use agb::{
-
-    display::{object::{Graphics, OamManaged, Object, Sprite, TagMap}, tiled::{MapLoan, RegularBackgroundSize, RegularMap, TileFormat, TileSet, TileSetting, TiledMap, VRamManager}}, fixnum::Vector2D, include_background_gfx, interrupt::{add_interrupt_handler, Interrupt, VBlank}, rng, Gba
+    input::{Button, ButtonController, Tri},
+    display::{
+        object::{Graphics, OamManaged, Object, Sprite, TagMap},
+        tiled::{MapLoan, RegularBackgroundSize, RegularMap, TileFormat, TileSet, TileSetting, TiledMap, VRamManager}
+    },
+    fixnum::Vector2D,
+    include_background_gfx,
+    interrupt::{add_interrupt_handler, Interrupt, VBlank},
+    rng,
+    Gba
 };
 
 extern crate alloc;
@@ -76,12 +84,13 @@ fn set_background(mut vram: &mut VRamManager, bg: &mut MapLoan<'_, RegularMap>) 
 }
 
 pub trait Collidable {
+    fn get_name(&self) -> &str;
     fn get_rect(&self) -> &Rect;
     fn collides(&self, other: &impl Collidable) -> bool {
         let my_rect = self.get_rect();
-        log::error!("1: {:?}", my_rect);
-        log::error!("2: {:?}", other.get_rect());
-        log::error!("");
+        // log::error!("1: {:?}", my_rect);
+        // log::error!("2: {:?}", other.get_rect());
+        // log::error!("");
         let other_rect = other.get_rect();
         // Check for overlap in the x-axis
         let x_overlap = my_rect.pos.x < other_rect.pos.x + other_rect.size.x
@@ -92,7 +101,13 @@ pub trait Collidable {
             && my_rect.pos.y + my_rect.size.y > other_rect.pos.y;
 
         // Collision occurs if there's overlap on both axes
-        x_overlap && y_overlap
+        let collides = x_overlap && y_overlap;
+
+        if collides {
+            log::error!("{} collides {}", self.get_name(), other.get_name());
+        }
+
+        collides
     }
 }
 
@@ -114,6 +129,9 @@ struct Pipe<'obj> {
 impl Collidable for Pipe<'_> {
     fn get_rect(&self) -> &Rect {
         &self.rect
+    }
+    fn get_name(&self) -> &str {
+        "Pipe"
     }
 }
 
@@ -196,30 +214,53 @@ impl Collidable for Bird<'_> {
     fn get_rect(&self) -> &Rect {
         &self.rect
     }
+
+    fn get_name(&self) -> &str {
+        "bird"
+    }
 }
 
 impl<'obj> Bird<'obj> {
     fn new(object: &'obj OamManaged<'_>, x: i32, y: i32) -> Self{
         let bird_idle_tag = GRAPHICS.tags().get("Bird Idle");
-        let pipe_topleft:Object<'obj> = object.object_sprite(bird_idle_tag.sprite(0));
+        let mut bird_img:Object<'obj> = object.object_sprite(bird_idle_tag.sprite(0));
+        bird_img.show();
         let bird = Self {
             rect: Rect {
                 size: (8,8).into(),
                 pos: (x,y).into(),
             },
-            img:pipe_topleft
+            img:bird_img
         };
         bird
+    }
+
+    fn handle_movement(&mut self, input: &ButtonController, frame_ctr: u32) {
+        if frame_ctr % 2 == 0{
+            let pixel_move_x = match input.x_tri() {
+                Tri::Negative => -1,
+                Tri::Positive => 1,
+                Tri::Zero => 0,
+            };
+            let pixel_move_y = match input.y_tri() {
+                Tri::Negative => -1,
+                Tri::Positive => 1,
+                Tri::Zero => 0,
+            };
+            self.rect.pos = (&self.rect.pos.x + pixel_move_x, self.rect.pos.y + pixel_move_y).into();
+            self.img.set_position(self.rect.pos);
+        }
     }
 }
 
 #[agb::entry]
 fn main(mut gba: agb::Gba) -> ! {
     mgba_log::init().expect("unable to initialize mGBA logger");
+    let mut input = ButtonController::new();
     let object = gba.display.object.get_managed();
     let bird_tag = GRAPHICS.tags().get("Bird Idle");
-    let mut bird = object.object_sprite(bird_tag.sprite(0));
-    bird.set_x(50).set_y(50).show();
+    let mut bird = Bird::new(&object, 0,0);//= object.object_sprite(bird_tag.sprite(0));
+    // bird.set_x(50).set_y(50).show();
     let vblank = VBlank::get();
     let (mut gfx, mut vram) = gba.display.video.tiled0();
     let (gfx, mut vram) = gba.display.video.tiled0();
@@ -228,20 +269,27 @@ fn main(mut gba: agb::Gba) -> ! {
         RegularBackgroundSize::Background32x32,
         TileFormat::FourBpp,
     );
-    let mut pipe2 = Pipe::new(&object, 40, 104, 4);
-    let mut pipe = Pipe::new(&object, 100, 104, 4);
+    let mut pipes = [
+        Pipe::new(&object, 40, 104, 4),
+        Pipe::new(&object, 100, 104, 4),
+    ];
+    // let mut pipe2 = ;
+    // let mut pipe = ;
     object.commit();
     set_background(&mut vram, &mut bg);
     bg.commit(&mut vram);
     bg.set_visible(true);
     let mut frame_ctr:u32 = 0;
     loop {
-        if frame_ctr%5 == 0{
-            let ppos = pipe.get_pos();
-            pipe.update_pos(((ppos.x-1) as i32, ppos.y as i32).into());
-            log::error!("{}", pipe.collides(&pipe2));
-            // log::error!("{:?}", pipe.get_pos());
-            object.commit();
+        input.update(); // Update button states
+        bird.handle_movement(&input, frame_ctr);
+        if frame_ctr%20 == 0{
+            let ppos = pipes[0].get_pos();
+            pipes[0].update_pos(((ppos.x-1) as i32, ppos.y as i32).into());
+        }
+        object.commit();
+        for p in pipes.iter() {
+            bird.collides(p);
         }
 
         frame_ctr += 1;
