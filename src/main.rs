@@ -207,6 +207,8 @@ impl<'obj> Pipe<'obj> {
 
 struct Bird<'obj> {
     rect: Rect,
+    vel: Vector2D<i32>,
+    accel: Vector2D<i32>,
     img: Object<'obj>,
 }
 
@@ -230,25 +232,41 @@ impl<'obj> Bird<'obj> {
                 size: (8,8).into(),
                 pos: (x,y).into(),
             },
+            vel: (0,0).into(),
+            accel: (0,0).into(),
             img:bird_img
         };
         bird
     }
 
     fn handle_movement(&mut self, input: &ButtonController, frame_ctr: u32) {
+        let mut new_pos = self.rect.pos;
         if frame_ctr % 2 == 0{
-            let pixel_move_x = match input.x_tri() {
-                Tri::Negative => -1,
-                Tri::Positive => 1,
-                Tri::Zero => 0,
-            };
-            let pixel_move_y = match input.y_tri() {
-                Tri::Negative => -1,
-                Tri::Positive => 1,
-                Tri::Zero => 0,
-            };
-            self.rect.pos = (&self.rect.pos.x + pixel_move_x, self.rect.pos.y + pixel_move_y).into();
-            self.img.set_position(self.rect.pos);
+            let x_state = input.x_tri() as i32;
+            let y_state = input.y_tri() as i32;
+            self.accel.x += x_state*10;
+            self.accel.y += y_state*10;
+            self.vel.x += self.accel.x/50;
+            self.vel.y += self.accel.y/50;
+            new_pos.x += self.vel.x;
+            new_pos.y += self.vel.y;
+            // self.accel.x =
+            // self.accel.y = self.accel.y
+            // new_pos.x += pixel_move_x;
+            // new_pos.y += pixel_move_y;
+            self.img.set_position(new_pos);
+
+            // friction
+            if self.accel.x > 0 {
+                self.accel.x -= 1;
+            } else {
+                self.accel.x += 1;
+            }
+            if self.accel.y > 0 {
+                self.accel.y -= 1;
+            } else {
+                self.accel.y += 1;
+            }
         }
     }
 }
