@@ -35,33 +35,21 @@ have a struct for object data and collision type
 */
 #![no_std]
 #![no_main]
+// #![feature(random)]
+// use core::random::Random;
+
 use agb::{
-    input::{Button, ButtonController, Tri},
     display::{
-        object::{Graphics, OamManaged, Object, Sprite, TagMap},
-        tiled::{MapLoan, RegularBackgroundSize, RegularMap, TileFormat, TileSet, TileSetting, TiledMap, VRamManager}
-    },
-    fixnum::Vector2D,
-    include_background_gfx,
-    interrupt::{add_interrupt_handler, Interrupt, VBlank},
-    rng,
-    Gba
+        object::{Graphics, OamManaged, Object, Sprite, TagMap}, tiled::{MapLoan, RegularBackgroundSize, RegularMap, TileFormat, TileSet, TileSetting, TiledMap, VRamManager}, HEIGHT, WIDTH
+    }, fixnum::Vector2D, include_background_gfx, input::{Button, ButtonController, Tri}, interrupt::{add_interrupt_handler, Interrupt, VBlank}, rng::{self, RandomNumberGenerator}, Gba
 };
 
 extern crate alloc;
 use alloc::vec::Vec;
 
-enum CollType {
-    Bird,
-    Pipe,
-    Ground,
-}
-
 static GRAPHICS: &Graphics = agb::include_aseprite!(
     "gfx/sprites.aseprite"
 );
-static SPRITES: &[Sprite] = GRAPHICS.sprites();
-static TAG_MAP: &TagMap = GRAPHICS.tags();
 
 include_background_gfx!(backgrounds, "000000",
     background => deduplicate "gfx/background.aseprite",
@@ -111,6 +99,43 @@ pub trait Collidable {
     }
 }
 
+struct Obstacle<'obj> {
+    top_pipe: Pipe<'obj>,
+    bot_pipe: Pipe<'obj>,
+}
+
+impl<'obj> Obstacle<'obj> {
+    fn get_pipe_pos_and_height(rng: &mut RandomNumberGenerator) -> [[i32; 2];2] {
+        let gap = 16;
+        let max_pipe_height = (3*HEIGHT)/4;
+        let min_pipe_height = HEIGHT - max_pipe_height - gap;
+        let top_pipe_height = max_pipe_height - min_pipe_height;
+        let top_pipe_top_pos = -(((rng.gen()as u32)%(top_pipe_height as u32)) as i32);
+        let top_pipe_bot_pos = top_pipe_top_pos + max_pipe_height;
+
+        let bot_pipe_top_pos = top_pipe_bot_pos + gap;
+        let bot_pipe_height  = HEIGHT - bot_pipe_top_pos;
+        [[top_pipe_top_pos, top_pipe_height],[bot_pipe_top_pos, bot_pipe_height]]
+    }
+    fn new(object: &'obj OamManaged<'_>, rng: &mut RandomNumberGenerator, x: i32) -> Self {
+        let r = Obstacle::get_pipe_pos_and_height(rng);
+        let top_pipe = Pipe::new(&object, &rng, x, (r[0][0]/8)*8, r[0][1]/8);
+        let bot_pipe = Pipe::new(&object, &rng, x, (r[1][0]/8)*8, r[1][1]/8);
+        log::error!("{:?}", r);
+        Self {
+            top_pipe,
+            bot_pipe
+        }
+    }
+
+    fn move_tick(&mut self, rng: &RandomNumberGenerator) {
+        self.top_pipe.rect.pos = (self.top_pipe.rect.pos.x-1, self.top_pipe.rect.pos.y).into();
+        self.bot_pipe.rect.pos = (self.bot_pipe.rect.pos.x-1, self.bot_pipe.rect.pos.y).into();
+        self.top_pipe.update_pos(rng, self.top_pipe.rect.pos);
+        self.bot_pipe.update_pos(rng, self.bot_pipe.rect.pos);
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 struct Rect {
     size: Vector2D<i32>,
@@ -136,7 +161,7 @@ impl Collidable for Pipe<'_> {
 }
 
 impl<'obj> Pipe<'obj> {
-    fn new(object: &'obj OamManaged<'_>, x: i32, y: i32, height:i32) -> Self{
+    fn new(object: &'obj OamManaged<'_>, rng: &RandomNumberGenerator, x: i32, y: i32, height:i32) -> Self{
         let rect = Rect {
             size: (8*3, 8*height).into(),
             pos: (x,y).into(),
@@ -178,15 +203,24 @@ impl<'obj> Pipe<'obj> {
             rightside: rightsidevec,
             middle: midvec,
         };
-        pipe.update_pos(pipe.rect.pos);
+        pipe.update_pos(rng, pipe.rect.pos);
         pipe
     }
 
-    fn update_pos(&mut self, pos:Vector2D<i32>) {
+    fn screen_bound(&mut self) {
+        let pos = &mut self.rect.pos;
+        let size = &self.rect.size;
+        if pos.x < -size.x {
+            pos.x = WIDTH;
+        }
+    }
+
+    fn update_pos(&mut self, rng: &RandomNumberGenerator, pos:Vector2D<i32>) {
         self.rect.pos = pos;
         let (x,y) = (self.rect.pos.x, self.rect.pos.y);
         self.top_left.set_position((x,y));
         self.top_right.set_position((x+16,y));
+        self.screen_bound();
         for (i, e) in self.middle.iter_mut().enumerate() {
             e.set_position(((x+8) as i32, y+(i as i32)*8));
         }
@@ -197,12 +231,6 @@ impl<'obj> Pipe<'obj> {
             e.set_position(((x+16) as i32, y+((i+1) as i32)*8));
         }
     }
-
-    fn get_pos(&self) -> Vector2D<i32> {
-        (self.top_left.x(), self.top_left.y()).into()
-    }
-
-    // fn is_colliding(&self, other_rect: &Rect) -> bool { // Check for overlap in the x-axis let x_overlap = self.rect.pos.x < other_rect.pos.x + other_rect.size.x && self.rect.pos.x + self.rect.size.x > other_rect.pos.x; // Check for overlap in the y-axis let y_overlap = self.rect.pos.y < other_rect.pos.y + other_rect.size.y && self.rect.pos.y + self.rect.size.y > other_rect.pos.y; // Collision occurs if there's overlap on both axes x_overlap && y_overlap }
 }
 
 struct Bird<'obj> {
@@ -239,78 +267,86 @@ impl<'obj> Bird<'obj> {
         bird
     }
 
-    fn handle_movement(&mut self, input: &ButtonController, frame_ctr: u32) {
+    fn handle_movement(&mut self, input: &ButtonController) {
         let mut new_pos = self.rect.pos;
-        if frame_ctr % 2 == 0{
-            let x_state = input.x_tri() as i32;
-            let y_state = input.y_tri() as i32;
-            self.accel.x += x_state*10;
-            self.accel.y += y_state*10;
-            self.vel.x += self.accel.x/50;
-            self.vel.y += self.accel.y/50;
-            new_pos.x += self.vel.x;
-            new_pos.y += self.vel.y;
-            // self.accel.x =
-            // self.accel.y = self.accel.y
-            // new_pos.x += pixel_move_x;
-            // new_pos.y += pixel_move_y;
-            self.img.set_position(new_pos);
+        let x_state = input./* just_pressed_ */x_tri() as i32;
+        let y_state = input.just_pressed_y_tri() as i32;
+        self.accel.x += x_state*100;
+        self.vel.x += self.accel.x/500;
+        new_pos.x += self.vel.x;
 
-            // friction
-            if self.accel.x > 0 {
-                self.accel.x -= 1;
-            } else {
-                self.accel.x += 1;
-            }
-            if self.accel.y > 0 {
-                self.accel.y -= 1;
-            } else {
-                self.accel.y += 1;
-            }
+        self.accel.y += y_state*300;
+        self.vel.y += self.accel.y/50;
+        new_pos.y += self.vel.y;
+        // log::error!("{:?} {:?}", new_pos, self.vel);
+        self.img.set_position(new_pos);
+
+        // friction
+        if self.accel.x > 0 {
+            self.accel.x -= 1;
+        } else {
+            self.accel.x += 1;
+        }
+        if self.accel.y > 100 {
+            self.accel.y -= 2;
+        } else {
+            self.accel.y += 9;
         }
     }
 }
 
+struct GameState<'obj> {
+    // obj_man: OamManaged<'_>,
+    frame_counter: u32,
+    rng: rng::RandomNumberGenerator,
+    bird: Bird<'obj>,
+    obstacles: Vec<Obstacle<'obj>>,
+}
+
+fn init() { }
+fn reset() { }
+
 #[agb::entry]
 fn main(mut gba: agb::Gba) -> ! {
+    let mut rng = rng::RandomNumberGenerator::new();
     mgba_log::init().expect("unable to initialize mGBA logger");
     let mut input = ButtonController::new();
     let object = gba.display.object.get_managed();
-    let bird_tag = GRAPHICS.tags().get("Bird Idle");
-    let mut bird = Bird::new(&object, 0,0);//= object.object_sprite(bird_tag.sprite(0));
-    // bird.set_x(50).set_y(50).show();
     let vblank = VBlank::get();
-    let (mut gfx, mut vram) = gba.display.video.tiled0();
+    // let (/* mut gfx */_, /* mut  */vram) = gba.display.video.tiled0();
     let (gfx, mut vram) = gba.display.video.tiled0();
     let mut bg = gfx.background(
         agb::display::Priority::P0,
         RegularBackgroundSize::Background32x32,
         TileFormat::FourBpp,
     );
-    let mut pipes = [
-        Pipe::new(&object, 40, 104, 4),
-        Pipe::new(&object, 100, 104, 4),
+    let obstacles = [
+        Obstacle::new(&object, &mut rng, WIDTH-24),
+        Obstacle::new(&object, &mut rng, 8*16,),
     ];
-    // let mut pipe2 = ;
-    // let mut pipe = ;
+    let obs_vec: Vec<Obstacle> = Vec::from(obstacles);
+    let mut gs = GameState {
+        frame_counter: 0,
+        rng: rng,
+        bird: Bird::new(&object, 0,0),
+        obstacles: obs_vec,
+    };
     object.commit();
     set_background(&mut vram, &mut bg);
     bg.commit(&mut vram);
     bg.set_visible(true);
-    let mut frame_ctr:u32 = 0;
     loop {
         input.update(); // Update button states
-        bird.handle_movement(&input, frame_ctr);
-        if frame_ctr%20 == 0{
-            let ppos = pipes[0].get_pos();
-            pipes[0].update_pos(((ppos.x-1) as i32, ppos.y as i32).into());
+        for e in gs.obstacles.iter_mut() {
+            e.move_tick(&mut gs.rng);
         }
+        gs.bird.handle_movement(/* &gs.rng,  */&input);
         object.commit();
-        for p in pipes.iter() {
-            bird.collides(p);
-        }
+        // for p in pipes.iter() {
+        //     bird.collides(p);
+        // }
 
-        frame_ctr += 1;
+        gs.frame_counter += 1;
         vblank.wait_for_vblank();
     }
 }
