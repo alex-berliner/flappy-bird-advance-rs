@@ -106,21 +106,29 @@ struct Obstacle<'obj> {
 
 impl<'obj> Obstacle<'obj> {
     fn get_pipe_pos_and_height(rng: &mut RandomNumberGenerator) -> [[i32; 2];2] {
-        let gap = 16;
-        let max_pipe_height = (3*HEIGHT)/4;
-        let min_pipe_height = HEIGHT - max_pipe_height - gap;
-        let top_pipe_height = max_pipe_height - min_pipe_height;
+        let gap = 64;
+        let max_pipe_height = (3*HEIGHT)/4 - gap;
+        let min_pipe_height = HEIGHT - max_pipe_height /* + gap */;
+        log::warn!("gap: {}", gap);
+        log::warn!("max_pipe_height: {}", max_pipe_height);
+        log::warn!("min_pipe_height: {}", min_pipe_height);
+        let top_pipe_height = max_pipe_height;
         let top_pipe_top_pos = -(((rng.gen()as u32)%(top_pipe_height as u32)) as i32);
         let top_pipe_bot_pos = top_pipe_top_pos + max_pipe_height;
-
+        log::warn!("top_pipe_height: {}", top_pipe_height);
+        log::warn!("top_pipe_top_pos: {}", top_pipe_top_pos);
+        log::warn!("top_pipe_bot_pos: {}", top_pipe_bot_pos);
         let bot_pipe_top_pos = top_pipe_bot_pos + gap;
-        let bot_pipe_height  = HEIGHT - bot_pipe_top_pos;
+        let bot_pipe_height = HEIGHT - bot_pipe_top_pos;
+        log::warn!("bot_pipe_top_pos: {}", bot_pipe_top_pos);
+        log::warn!("bot_pipe_height: {}", bot_pipe_height);
         [[top_pipe_top_pos, top_pipe_height],[bot_pipe_top_pos, bot_pipe_height]]
     }
+
     fn new(object: &'obj OamManaged<'_>, rng: &mut RandomNumberGenerator, x: i32) -> Self {
         let r = Obstacle::get_pipe_pos_and_height(rng);
-        let top_pipe = Pipe::new(&object, &rng, x, (r[0][0]/8)*8, r[0][1]/8);
-        let bot_pipe = Pipe::new(&object, &rng, x, (r[1][0]/8)*8, r[1][1]/8);
+        let top_pipe = Pipe::new(&object, &rng, x, r[0][0], r[0][1]/8/* +5 */);
+        let bot_pipe = Pipe::new(&object, &rng, x, r[1][0], r[1][1]/8/* +5 */);
         log::error!("{:?}", r);
         Self {
             top_pipe,
@@ -174,16 +182,16 @@ impl<'obj> Pipe<'obj> {
 
         let mut pipe_topleft = object.object_sprite(pipe_top_left_tag.sprite(0));
         let mut pipe_topright = object.object_sprite(pipe_top_right_tag.sprite(0));
-        // pipe_topright.set_hflip(true);
         let mut midvec:Vec<Object<'_>> = Vec::new();
         let mut leftsidevec:Vec<Object<'_>> = Vec::new();
         let mut rightsidevec:Vec<Object<'_>> = Vec::new();
-        // let height = 4;
+
         for _ in 0..height+1 {
             let mut pipe_middle = object.object_sprite(pipe_middle_tag.sprite(0));
             pipe_middle.show();
             midvec.push(pipe_middle);
         }
+
         for _ in 0..height {
             let mut pipe_left_side = object.object_sprite(pipe_left_side_tag.sprite(0));
             pipe_left_side.show();
@@ -308,7 +316,7 @@ fn reset() { }
 
 #[agb::entry]
 fn main(mut gba: agb::Gba) -> ! {
-    let mut rng = rng::RandomNumberGenerator::new();
+    let mut rng = rng::RandomNumberGenerator::new_with_seed([10,13,14,15]);
     mgba_log::init().expect("unable to initialize mGBA logger");
     let mut input = ButtonController::new();
     let object = gba.display.object.get_managed();
@@ -321,8 +329,8 @@ fn main(mut gba: agb::Gba) -> ! {
         TileFormat::FourBpp,
     );
     let obstacles = [
-        Obstacle::new(&object, &mut rng, WIDTH-24),
-        Obstacle::new(&object, &mut rng, 8*16,),
+        Obstacle::new(&object, &mut rng, WIDTH/2),
+        Obstacle::new(&object, &mut rng, WIDTH),
     ];
     let obs_vec: Vec<Obstacle> = Vec::from(obstacles);
     let mut gs = GameState {
