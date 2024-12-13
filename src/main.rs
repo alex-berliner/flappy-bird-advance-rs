@@ -108,27 +108,19 @@ impl<'obj> Obstacle<'obj> {
     fn get_pipe_pos_and_height(rng: &mut RandomNumberGenerator) -> [[i32; 2];2] {
         let gap = 64;
         let max_pipe_height = (3*HEIGHT)/4 - gap;
-        let min_pipe_height = HEIGHT - max_pipe_height /* + gap */;
-        log::warn!("gap: {}", gap);
-        log::warn!("max_pipe_height: {}", max_pipe_height);
-        log::warn!("min_pipe_height: {}", min_pipe_height);
+        let _min_pipe_height = HEIGHT - max_pipe_height /* + gap */;
         let top_pipe_height = max_pipe_height;
         let top_pipe_top_pos = -(((rng.gen()as u32)%(top_pipe_height as u32)) as i32);
         let top_pipe_bot_pos = top_pipe_top_pos + max_pipe_height;
-        log::warn!("top_pipe_height: {}", top_pipe_height);
-        log::warn!("top_pipe_top_pos: {}", top_pipe_top_pos);
-        log::warn!("top_pipe_bot_pos: {}", top_pipe_bot_pos);
         let bot_pipe_top_pos = top_pipe_bot_pos + gap;
         let bot_pipe_height = HEIGHT - bot_pipe_top_pos;
-        log::warn!("bot_pipe_top_pos: {}", bot_pipe_top_pos);
-        log::warn!("bot_pipe_height: {}", bot_pipe_height);
         [[top_pipe_top_pos, top_pipe_height],[bot_pipe_top_pos, bot_pipe_height]]
     }
 
     fn new(object: &'obj OamManaged<'_>, rng: &mut RandomNumberGenerator, x: i32) -> Self {
         let r = Obstacle::get_pipe_pos_and_height(rng);
-        let top_pipe = Pipe::new(&object, &rng, x, r[0][0], r[0][1]/8/* +5 */);
-        let bot_pipe = Pipe::new(&object, &rng, x, r[1][0], r[1][1]/8/* +5 */);
+        let top_pipe = Pipe::new(&object, x, r[0][0], r[0][1]/8/* +5 */);
+        let bot_pipe = Pipe::new(&object, x, r[1][0], r[1][1]/8/* +5 */);
         log::error!("{:?}", r);
         Self {
             top_pipe,
@@ -136,11 +128,11 @@ impl<'obj> Obstacle<'obj> {
         }
     }
 
-    fn move_tick(&mut self, rng: &RandomNumberGenerator) {
+    fn move_tick(&mut self) {
         self.top_pipe.rect.pos = (self.top_pipe.rect.pos.x-1, self.top_pipe.rect.pos.y).into();
         self.bot_pipe.rect.pos = (self.bot_pipe.rect.pos.x-1, self.bot_pipe.rect.pos.y).into();
-        self.top_pipe.update_pos(rng, self.top_pipe.rect.pos);
-        self.bot_pipe.update_pos(rng, self.bot_pipe.rect.pos);
+        self.top_pipe.update_pos(self.top_pipe.rect.pos);
+        self.bot_pipe.update_pos(self.bot_pipe.rect.pos);
     }
 }
 
@@ -169,7 +161,7 @@ impl Collidable for Pipe<'_> {
 }
 
 impl<'obj> Pipe<'obj> {
-    fn new(object: &'obj OamManaged<'_>, rng: &RandomNumberGenerator, x: i32, y: i32, height:i32) -> Self{
+    fn new(object: &'obj OamManaged<'_>, x: i32, y: i32, height:i32) -> Self{
         let rect = Rect {
             size: (8*3, 8*height).into(),
             pos: (x,y).into(),
@@ -211,7 +203,7 @@ impl<'obj> Pipe<'obj> {
             rightside: rightsidevec,
             middle: midvec,
         };
-        pipe.update_pos(rng, pipe.rect.pos);
+        pipe.update_pos(pipe.rect.pos);
         pipe
     }
 
@@ -223,7 +215,7 @@ impl<'obj> Pipe<'obj> {
         }
     }
 
-    fn update_pos(&mut self, rng: &RandomNumberGenerator, pos:Vector2D<i32>) {
+    fn update_pos(&mut self, pos:Vector2D<i32>) {
         self.rect.pos = pos;
         let (x,y) = (self.rect.pos.x, self.rect.pos.y);
         self.top_left.set_position((x,y));
@@ -351,7 +343,7 @@ fn main(mut gba: agb::Gba) -> ! {
     loop {
         input.update(); // Update button states
         for e in gs.obstacles.iter_mut() {
-            e.move_tick(&mut gs.rng);
+            e.move_tick();
         }
         gs.bird.handle_movement(/* &gs.rng,  */&input);
         object.commit();
