@@ -76,9 +76,6 @@ pub trait Collidable {
     fn get_rect(&self) -> &Rect;
     fn collides(&self, other: &impl Collidable) -> bool {
         let my_rect = self.get_rect();
-        // log::error!("1: {:?}", my_rect);
-        // log::error!("2: {:?}", other.get_rect());
-        // log::error!("");
         let other_rect = other.get_rect();
         // Check for overlap in the x-axis
         let x_overlap = my_rect.pos.x < other_rect.pos.x + other_rect.size.x
@@ -105,7 +102,7 @@ struct Obstacle<'obj> {
 }
 
 impl<'obj> Obstacle<'obj> {
-    fn get_pipe_pos_and_height(rng: &mut RandomNumberGenerator) -> [[i32; 2];2] {
+    fn create_pipe_pos_and_height(rng: &mut RandomNumberGenerator) -> [[i32; 2];2] {
         let gap = 64;
         let max_pipe_height = (3*HEIGHT)/4 - gap;
         let _min_pipe_height = HEIGHT - max_pipe_height /* + gap */;
@@ -118,9 +115,13 @@ impl<'obj> Obstacle<'obj> {
     }
 
     fn new(object: &'obj OamManaged<'_>, rng: &mut RandomNumberGenerator, x: i32) -> Self {
-        let r = Obstacle::get_pipe_pos_and_height(rng);
-        let top_pipe = Pipe::new(&object, x, r[0][0], r[0][1]/8/* +5 */);
-        let bot_pipe = Pipe::new(&object, x, r[1][0], r[1][1]/8/* +5 */);
+        let r = Obstacle::create_pipe_pos_and_height(rng);
+        let mut top_pipe = Pipe::new(&object, r[0][1]/8);
+        let mut bot_pipe = Pipe::new(&object, r[1][1]/8);
+        top_pipe.update_pos((x, r[0][0]).into());
+        top_pipe.show();
+        bot_pipe.update_pos((x, r[1][0]).into());
+        bot_pipe.show();
         log::error!("{:?}", r);
         Self {
             top_pipe,
@@ -161,10 +162,10 @@ impl Collidable for Pipe<'_> {
 }
 
 impl<'obj> Pipe<'obj> {
-    fn new(object: &'obj OamManaged<'_>, x: i32, y: i32, height:i32) -> Self{
+    fn new(object: &'obj OamManaged<'_>, height:i32) -> Self {
         let rect = Rect {
             size: (8*3, 8*height).into(),
-            pos: (x,y).into(),
+            pos:  (0,0).into(),
         };
         let pipe_top_left_tag = GRAPHICS.tags().get("Pipe Top Left");
         let pipe_top_right_tag = GRAPHICS.tags().get("Pipe Top Right");
@@ -172,30 +173,26 @@ impl<'obj> Pipe<'obj> {
         let pipe_left_side_tag = GRAPHICS.tags().get("Pipe Left Side");
         let pipe_right_side_tag = GRAPHICS.tags().get("Pipe Right Side");
 
-        let mut pipe_topleft = object.object_sprite(pipe_top_left_tag.sprite(0));
-        let mut pipe_topright = object.object_sprite(pipe_top_right_tag.sprite(0));
+        let pipe_topleft = object.object_sprite(pipe_top_left_tag.sprite(0));
+        let pipe_topright = object.object_sprite(pipe_top_right_tag.sprite(0));
         let mut midvec:Vec<Object<'_>> = Vec::new();
         let mut leftsidevec:Vec<Object<'_>> = Vec::new();
         let mut rightsidevec:Vec<Object<'_>> = Vec::new();
 
         for _ in 0..height+1 {
-            let mut pipe_middle = object.object_sprite(pipe_middle_tag.sprite(0));
-            pipe_middle.show();
+            let pipe_middle = object.object_sprite(pipe_middle_tag.sprite(0));
             midvec.push(pipe_middle);
         }
 
         for _ in 0..height {
-            let mut pipe_left_side = object.object_sprite(pipe_left_side_tag.sprite(0));
-            pipe_left_side.show();
+            let pipe_left_side = object.object_sprite(pipe_left_side_tag.sprite(0));
             leftsidevec.push(pipe_left_side);
 
-            let mut pipe_right_side = object.object_sprite(pipe_right_side_tag.sprite(0));
-            pipe_right_side.show();
+            let pipe_right_side = object.object_sprite(pipe_right_side_tag.sprite(0));
             rightsidevec.push(pipe_right_side);
         }
-        pipe_topleft.show();
-        pipe_topright.show();
-        let mut pipe = Self {
+
+        let pipe = Self {
             rect: rect,
             top_left: pipe_topleft,
             top_right: pipe_topright,
@@ -203,8 +200,21 @@ impl<'obj> Pipe<'obj> {
             rightside: rightsidevec,
             middle: midvec,
         };
-        pipe.update_pos(pipe.rect.pos);
         pipe
+    }
+
+    fn show(&mut self) {
+        for e in self.leftside.iter_mut() {
+            e.show();
+        }
+        for e in self.rightside.iter_mut() {
+            e.show();
+        }
+        for e in self.middle.iter_mut() {
+            e.show();
+        }
+        self.top_left.show();
+        self.top_right.show();
     }
 
     fn screen_bound(&mut self) {
