@@ -304,14 +304,30 @@ impl<'obj> Bird<'obj> {
 }
 
 struct GameState<'obj> {
-    // obj_man: OamManaged<'_>,
     frame_counter: u32,
     rng: rng::RandomNumberGenerator,
     bird: Bird<'obj>,
     obstacles: Vec<Obstacle<'obj>>,
 }
 
-fn init() { }
+fn gs_init<'obj>(object: &'obj OamManaged<'obj>) -> GameState<'obj>{
+    let mut rng = rng::RandomNumberGenerator::new_with_seed([10,13,14,15]);
+    // let obj_man = gba.display.object.get_managed();
+    let bird = Bird::new(object, 0,0);
+    let obstacles = [
+        Obstacle::new(object, &mut rng, WIDTH/2),
+        Obstacle::new(object, &mut rng, WIDTH),
+    ];
+    let obs_vec: Vec<Obstacle> = Vec::from(obstacles);
+    let r= GameState {
+        frame_counter: 0,
+        rng,
+        bird,
+        obstacles: obs_vec,
+    };
+    r
+}
+
 fn reset() { }
 
 #[agb::entry]
@@ -321,24 +337,13 @@ fn main(mut gba: agb::Gba) -> ! {
     let mut input = ButtonController::new();
     let object = gba.display.object.get_managed();
     let vblank = VBlank::get();
-    // let (/* mut gfx */_, /* mut  */vram) = gba.display.video.tiled0();
+    let mut gs = gs_init(&object);
     let (gfx, mut vram) = gba.display.video.tiled0();
     let mut bg = gfx.background(
         agb::display::Priority::P0,
         RegularBackgroundSize::Background32x32,
         TileFormat::FourBpp,
     );
-    let obstacles = [
-        Obstacle::new(&object, &mut rng, WIDTH/2),
-        Obstacle::new(&object, &mut rng, WIDTH),
-    ];
-    let obs_vec: Vec<Obstacle> = Vec::from(obstacles);
-    let mut gs = GameState {
-        frame_counter: 0,
-        rng: rng,
-        bird: Bird::new(&object, 0,0),
-        obstacles: obs_vec,
-    };
     object.commit();
     set_background(&mut vram, &mut bg);
     bg.commit(&mut vram);
