@@ -116,11 +116,13 @@ impl<'obj> Obstacle<'obj> {
 
     fn new(object: &'obj OamManaged<'_>, rng: &mut RandomNumberGenerator, x: i32) -> Self {
         let r = Obstacle::create_pipe_pos_and_height(rng);
-        let mut top_pipe = Pipe::new(&object, r[0][1]/8);
-        let mut bot_pipe = Pipe::new(&object, r[1][1]/8);
+        let mut top_pipe = Pipe::new(&object);
+        let mut bot_pipe = Pipe::new(&object);
         top_pipe.update_pos((x, r[0][0]).into());
+        top_pipe.set_height(object, r[0][1]/8);
         top_pipe.show();
         bot_pipe.update_pos((x, r[1][0]).into());
+        bot_pipe.set_height(object, r[1][1]/8);
         bot_pipe.show();
         log::error!("{:?}", r);
         Self {
@@ -144,6 +146,7 @@ struct Rect {
 }
 
 struct Pipe<'obj> {
+    height:i32,
     rect: Rect,
     top_left: Object<'obj>,
     top_right: Object<'obj>,
@@ -162,47 +165,47 @@ impl Collidable for Pipe<'_> {
 }
 
 impl<'obj> Pipe<'obj> {
-    fn new(object: &'obj OamManaged<'_>, height:i32) -> Self {
+    fn new(object: &'obj OamManaged<'_>) -> Self {
         let rect = Rect {
-            size: (8*3, 8*height).into(),
+            size: (8*3, 8).into(),
             pos:  (0,0).into(),
         };
         let pipe_top_left_tag = GRAPHICS.tags().get("Pipe Top Left");
         let pipe_top_right_tag = GRAPHICS.tags().get("Pipe Top Right");
-        let pipe_middle_tag = GRAPHICS.tags().get("Pipe Middle");
-        let pipe_left_side_tag = GRAPHICS.tags().get("Pipe Left Side");
-        let pipe_right_side_tag = GRAPHICS.tags().get("Pipe Right Side");
 
         let pipe_topleft = object.object_sprite(pipe_top_left_tag.sprite(0));
         let pipe_topright = object.object_sprite(pipe_top_right_tag.sprite(0));
-        let mut midvec:Vec<Object<'_>> = Vec::new();
-        let mut leftsidevec:Vec<Object<'_>> = Vec::new();
-        let mut rightsidevec:Vec<Object<'_>> = Vec::new();
-
-        for _ in 0..height+1 {
-            let pipe_middle = object.object_sprite(pipe_middle_tag.sprite(0));
-            midvec.push(pipe_middle);
-        }
-
-        for _ in 0..height {
-            let pipe_left_side = object.object_sprite(pipe_left_side_tag.sprite(0));
-            leftsidevec.push(pipe_left_side);
-
-            let pipe_right_side = object.object_sprite(pipe_right_side_tag.sprite(0));
-            rightsidevec.push(pipe_right_side);
-        }
 
         let pipe = Self {
+            height: 0,
             rect: rect,
             top_left: pipe_topleft,
             top_right: pipe_topright,
-            leftside: leftsidevec,
-            rightside: rightsidevec,
-            middle: midvec,
+            leftside: Vec::new(),
+            rightside: Vec::new(),
+            middle: Vec::new(),
         };
         pipe
     }
+    fn set_height(&mut self, object: &'obj OamManaged<'_>, height:i32) {
+        self.height=height;
+        let pipe_middle_tag = GRAPHICS.tags().get("Pipe Middle");
+        let pipe_left_side_tag = GRAPHICS.tags().get("Pipe Left Side");
+        let pipe_right_side_tag = GRAPHICS.tags().get("Pipe Right Side");
+        for _ in 0..self.height+1 {
+            let pipe_middle = object.object_sprite(pipe_middle_tag.sprite(0));
+            self.middle.push(pipe_middle);
+        }
 
+        for _ in 0..self.height {
+            let pipe_left_side = object.object_sprite(pipe_left_side_tag.sprite(0));
+            self.leftside.push(pipe_left_side);
+
+            let pipe_right_side = object.object_sprite(pipe_right_side_tag.sprite(0));
+            self.rightside.push(pipe_right_side);
+        }
+    }
+    // fn set_height(&self, )
     fn show(&mut self) {
         for e in self.leftside.iter_mut() {
             e.show();
