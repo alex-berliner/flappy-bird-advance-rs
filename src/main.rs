@@ -300,7 +300,7 @@ impl<'obj> Bird<'obj> {
         let mut new_pos = self.rect.pos;
         let scale_factor = 100;
         let y_state = input.just_pressed_y_tri();
-        if y_state != Tri::Zero {
+        if y_state == Tri::Negative {
             self.accel.y += (y_state as i32) * 3 * scale_factor;
         }
         self.vel.y += self.accel.y/scale_factor;
@@ -311,9 +311,9 @@ impl<'obj> Bird<'obj> {
             self.vel.y += 1;
         }
         if self.accel.y > 0 {
-            self.accel.y -= 35;
+            self.accel.y -= 15;
         } else if self.accel.y < 0 {
-            self.accel.y += 35;
+            self.accel.y += 15;
         }
         if new_pos.y > HEIGHT-self.rect.size.y {
             new_pos.y = HEIGHT-self.rect.size.y;
@@ -321,6 +321,9 @@ impl<'obj> Bird<'obj> {
         if new_pos.y < 0 {
             new_pos.y = 0;
         }
+        self.vel.y = self.vel.y.clamp(0, 100);
+        self.accel.y = self.accel.y.clamp(-300, 100);
+        log::error!("{:?} {:?} {:?}", new_pos, self.vel, self.accel);
         self.rect.pos = new_pos;
         self.img.set_position(self.rect.pos);
     }
@@ -384,7 +387,7 @@ fn main(mut gba: agb::Gba) -> ! {
     bg.commit(&mut vram);
     bg.set_visible(true);
     loop {
-        input.update(); // Update button states
+        input.update();
         if input.just_pressed_y_tri() != Tri::Zero {
             gs_set_moving(&mut gs, true);
         }
