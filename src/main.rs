@@ -27,25 +27,31 @@ sprite display:
     - idk just display the sprites man
 give objects a type - ground, pole, char to distinguish during collision
 */
-
-
-/*
-use single background for floor and pipes
-have a struct for object data and collision type
-*/
 #![no_std]
 #![no_main]
-// #![feature(random)]
-// use core::random::Random;
-
-use agb::{
-    display::{
-        object::{Graphics, OamManaged, Object, Sprite, TagMap}, tiled::{MapLoan, RegularBackgroundSize, RegularMap, TileFormat, TileSet, TileSetting, TiledMap, VRamManager}, HEIGHT, WIDTH
-    }, fixnum::Vector2D, include_background_gfx, input::{Button, ButtonController, Tri}, interrupt::{add_interrupt_handler, Interrupt, VBlank}, rng::{self, RandomNumberGenerator}, Gba
-};
 
 extern crate alloc;
 use alloc::vec::Vec;
+use agb::{
+    fixnum::Vector2D,
+    include_background_gfx,
+    interrupt::VBlank,
+    rng::RandomNumberGenerator,
+    input::{ButtonController, Tri},
+    display::{
+        HEIGHT,
+        WIDTH,
+        object::{Graphics, OamManaged, Object},
+        tiled::{
+            MapLoan,
+            RegularBackgroundSize,
+            RegularMap,
+            TileFormat,
+            TiledMap,
+            VRamManager
+        },
+    },
+};
 
 static GRAPHICS: &Graphics = agb::include_aseprite!(
     "gfx/sprites.aseprite"
@@ -77,20 +83,13 @@ pub trait Collidable {
     fn collides(&self, other: &impl Collidable) -> bool {
         let my_rect = self.get_rect();
         let other_rect = other.get_rect();
-        // log::error!("{}: {:?}; {}: {:?}", self.get_name(), my_rect, other.get_name(), other_rect);
-        // Check for overlap in the x-axis
         let x_overlap = my_rect.pos.x < other_rect.pos.x + other_rect.size.x
             && my_rect.pos.x + my_rect.size.x > other_rect.pos.x;
 
-        // Check for overlap in the y-axis
         let y_overlap = my_rect.pos.y < other_rect.pos.y + other_rect.size.y
             && my_rect.pos.y + my_rect.size.y > other_rect.pos.y;
 
-        // Collision occurs if there's overlap on both axes
         let collides = x_overlap && y_overlap;
-        // if collides {
-        //     log::error!("{} collides {}", self.get_name(), other.get_name());
-        // }
 
         collides
     }
@@ -124,7 +123,6 @@ impl<'obj> Obstacle<'obj> {
         bot_pipe.update_pos((x, r[1][0]).into());
         bot_pipe.set_height(object, r[1][1]/8);
         bot_pipe.show();
-        log::error!("{:?}", r);
         Self {
             top_pipe,
             bot_pipe
@@ -177,7 +175,7 @@ impl Collidable for Pipe<'_> {
 impl<'obj> Pipe<'obj> {
     fn new(object: &'obj OamManaged<'_>) -> Self {
         let rect = Rect {
-            size: (8*3, 8).into(),
+            size: (8*3, 0).into(),
             pos:  (0,0).into(),
         };
         let pipe_top_left_tag = GRAPHICS.tags().get("Pipe Top Left");
@@ -215,6 +213,8 @@ impl<'obj> Pipe<'obj> {
             let pipe_right_side = object.object_sprite(pipe_right_side_tag.sprite(0));
             self.rightside.push(pipe_right_side);
         }
+
+        self.rect.size = (8*3, height*8).into();
     }
 
     fn show(&mut self) {
@@ -315,7 +315,12 @@ impl<'obj> Bird<'obj> {
         } else if self.accel.y < 0 {
             self.accel.y += 35;
         }
-        log::error!("p: {} v: {} a: {}", new_pos.y, self.vel.y, self.accel.y);
+        if new_pos.y > HEIGHT-self.rect.size.y {
+            new_pos.y = HEIGHT-self.rect.size.y;
+        }
+        if new_pos.y < 0 {
+            new_pos.y = 0;
+        }
         self.rect.pos = new_pos;
         self.img.set_position(self.rect.pos);
     }
@@ -323,14 +328,12 @@ impl<'obj> Bird<'obj> {
 
 struct GameState<'obj> {
     frame_counter: u32,
-    rng: rng::RandomNumberGenerator,
     bird: Bird<'obj>,
     obstacles: Vec<Obstacle<'obj>>,
-    moving:bool,
 }
 
 fn gs_init<'obj>(object: &'obj OamManaged<'obj>) -> GameState<'obj>{
-    let mut rng = rng::RandomNumberGenerator::new_with_seed([10,13,14,15]);
+    let mut rng = RandomNumberGenerator::new_with_seed([10,13,14,15]);
     let bird = Bird::new(object, 50,HEIGHT*3/4);
     let obstacles = [
         Obstacle::new(object, &mut rng, 0),
@@ -339,10 +342,8 @@ fn gs_init<'obj>(object: &'obj OamManaged<'obj>) -> GameState<'obj>{
     let obs_vec: Vec<Obstacle> = Vec::from(obstacles);
     let mut r= GameState {
         frame_counter: 0,
-        rng,
         bird,
         obstacles: obs_vec,
-        moving: false,
     };
     gs_reset(&mut r);
     r
@@ -399,6 +400,7 @@ fn main(mut gba: agb::Gba) -> ! {
                 break;
             }
         }
+
         if reset {
             gs_reset(&mut gs);
         }
