@@ -33,24 +33,16 @@ give objects a type - ground, pole, char to distinguish during collision
 extern crate alloc;
 use alloc::vec::Vec;
 use agb::{
-    fixnum::Vector2D,
-    include_background_gfx,
-    interrupt::VBlank,
-    rng::RandomNumberGenerator,
-    input::{ButtonController, Tri},
     display::{
-        HEIGHT,
-        WIDTH,
-        object::{Graphics, OamManaged, Object},
-        tiled::{
+        object::{Graphics, OamManaged, Object}, tiled::{
             MapLoan,
             RegularBackgroundSize,
             RegularMap,
             TileFormat,
             TiledMap,
             VRamManager
-        },
-    },
+        }, HEIGHT, WIDTH
+    }, fixnum::Vector2D, include_background_gfx, input::{Button, ButtonController, Tri}, interrupt::VBlank, rng::RandomNumberGenerator
 };
 
 static GRAPHICS: &Graphics = agb::include_aseprite!(
@@ -297,11 +289,16 @@ impl<'obj> Bird<'obj> {
         if !self.moving {
             return;
         }
+
+        let any_just_pressed = Button::all().iter()
+            .map(|x|input
+            .is_just_pressed(x))
+            .any(|e|e);
+
         let mut new_pos = self.rect.pos;
         let scale_factor = 100;
-        let y_state = input.just_pressed_y_tri();
-        if y_state == Tri::Negative {
-            self.accel.y += (y_state as i32) * 3 * scale_factor;
+        if any_just_pressed {
+            self.accel.y += -3 * scale_factor;
         }
         self.vel.y += self.accel.y/scale_factor;
         new_pos.y += self.vel.y;
@@ -323,7 +320,6 @@ impl<'obj> Bird<'obj> {
         }
         self.vel.y = self.vel.y.clamp(0, 100);
         self.accel.y = self.accel.y.clamp(-300, 100);
-        log::error!("{:?} {:?} {:?}", new_pos, self.vel, self.accel);
         self.rect.pos = new_pos;
         self.img.set_position(self.rect.pos);
     }
